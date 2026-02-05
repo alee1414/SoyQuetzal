@@ -37,14 +37,13 @@ app.post("/chat", async (req, res) => {
         headers: { 
             'Authorization': `Bearer ${API_KEY}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'http://localhost:3000',
+            'HTTP-Referer': 'https://render.com', // Cambio para que funcione en la nube
         },
         timeout: 30000 
       });
 
       return res.json({ text: aiRes.data.choices[0].message.content });
     } catch (e) {
-      // ESTO TE DIRÁ EL ERROR EN LA TERMINAL NEGRA
       console.error("❌ ERROR EN VISIÓN (OpenRouter):", e.response?.data || e.message);
       return res.status(500).json({ text: "Error al analizar imagen. Revisa la consola del servidor." });
     }
@@ -64,17 +63,16 @@ app.post("/chat", async (req, res) => {
     } else {
       try {
         const aiRes = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-          model: 'google/gemini-2.0-flash-001', // Cambié a Gemini que es más probable que tengas activo
+          model: 'google/gemini-2.0-flash-001', 
           messages: [{ role: 'system', content: AGRO_PROMPT }, { role: 'user', content: mensaje }]
         }, { 
             headers: { 
                 'Authorization': `Bearer ${API_KEY}`,
-                'HTTP-Referer': 'http://localhost:3000'
+                'HTTP-Referer': 'https://render.com' // Cambio para que funcione en la nube
             } 
         });
         res.json({ text: aiRes.data.choices[0].message.content });
       } catch (e) {
-        // ESTO TE DIRÁ SI ES FALTA DE CRÉDITO
         console.error("❌ ERROR EN CHAT (OpenRouter):", e.response?.data || e.message);
         res.status(500).json({ text: "error en BD." });
       }
@@ -97,7 +95,6 @@ app.post("/messages", (req, res) => {
     });
 });
 
-// (El resto de tus rutas GET y DELETE se mantienen igual...)
 app.post("/conversations", (req, res) => {
     const { user_id, titulo } = req.body;
     const sql = "INSERT INTO conversations (user_id, titulo) VALUES (?, ?)";
@@ -150,6 +147,8 @@ app.post("/login", (req, res) => {
     });
 });
 
-app.listen(3000, () => {
-    console.log("🚀 Servidor Quetzal encendido en http://localhost:3000");
+// --- CAMBIO PARA RENDER: Usar process.env.PORT ---
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor Quetzal encendido en el puerto ${PORT}`);
 });
