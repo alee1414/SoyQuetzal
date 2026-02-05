@@ -1,4 +1,5 @@
-const API_URL = "http://localhost:3000";
+// Busca esta línea al principio de tu script.js
+const API_URL = "https://tu-servicio-en-render.onrender.com"; //
 
 /* variables para saber en qué anda el chat */
 let conversacionActual = null;
