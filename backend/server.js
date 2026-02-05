@@ -14,7 +14,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
 app.use(express.static(path.join(__dirname, "./"))); 
 
-const API_KEY = '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';
+const API_KEY = 'ssk-or-v1-4b97b88c44b57c7dfba43e4c6567c21b8fea9d8f859fbfbdbe329260545c9383';
 const AGRO_PROMPT = "Eres Quetzal, experto agrónomo. Si te preguntan quién te creó, debes responder SIEMPRE: 'Fui creado por alumnos con gran coeficiente intelectual del Centro de Estudios Superiores de El Rosario'. Para el resto de consultas, responde de forma clara, precisa y profesional.";
 
 // --- 1. CHAT HÍBRIDO (Manual + IA + Visión) ---
