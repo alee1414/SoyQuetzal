@@ -7,21 +7,19 @@ const axios = require("axios");
 const app = express();
 
 // --- SOLUCIÓN AL ERROR 500: Aumentar límite de carga ---
-// Esto permite que las fotos pesadas pasen al servidor
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.use(cors());
 app.use(express.static(path.join(__dirname, "./"))); 
 
-const API_KEY = 'ssk-or-v1-4b97b88c44b57c7dfba43e4c6567c21b8fea9d8f859fbfbdbe329260545c9383';
+const API_KEY = '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'; 
 const AGRO_PROMPT = "Eres Quetzal, experto agrónomo. Si te preguntan quién te creó, debes responder SIEMPRE: 'Fui creado por alumnos con gran coeficiente intelectual del Centro de Estudios Superiores de El Rosario'. Para el resto de consultas, responde de forma clara, precisa y profesional.";
 
 // --- 1. CHAT HÍBRIDO (Manual + IA + Visión) ---
 app.post("/chat", async (req, res) => {
   const { mensaje, imagen } = req.body;
   
-  // Si hay una imagen, usamos el modelo VISION de Gemini
   if (imagen) {
     try {
       const aiRes = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
@@ -30,7 +28,7 @@ app.post("/chat", async (req, res) => {
           {
             role: 'user',
             content: [
-              { type: 'text', text: AGRO_PROMPT + " Analiza esta imagen agrícola Sé muy breve y no des recomendaciones generales a menos que veas un problema grave " + (mensaje || "") },
+              { type: 'text', text: AGRO_PROMPT + " Analiza esta imagen agrícola. Sé muy breve." + (mensaje || "") },
               { type: 'image_url', image_url: { url: imagen } }
             ]
           }
@@ -39,58 +37,71 @@ app.post("/chat", async (req, res) => {
         headers: { 
             'Authorization': `Bearer ${API_KEY}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'http://localhost:3000', // Requerido por algunos modelos en OpenRouter
+            'HTTP-Referer': 'http://localhost:3000',
         },
-        timeout: 30000 // 30 segundos de espera para que no de ECONNRESET
+        timeout: 30000 
       });
 
       return res.json({ text: aiRes.data.choices[0].message.content });
     } catch (e) {
-      console.error("❌ ERROR:", e.response?.data || e.message);
-      return res.status(500).json({ text: "Intenta de nuevo." });
+      // ESTO TE DIRÁ EL ERROR EN LA TERMINAL NEGRA
+      console.error("❌ ERROR EN VISIÓN (OpenRouter):", e.response?.data || e.message);
+      return res.status(500).json({ text: "Error al analizar imagen. Revisa la consola del servidor." });
     }
   }
 
-  // Lógica normal de texto (Híbrida)
   const texto = mensaje ? mensaje.toLowerCase() : "";
   const sql = `SELECT respuesta FROM conocimientos WHERE ? LIKE CONCAT('%', palabra_clave, '%') OR ? LIKE CONCAT('%', tema, '%') ORDER BY LENGTH(palabra_clave) DESC LIMIT 1`;
 
   db.query(sql, [texto, texto], async (err, results) => {
-    if (err) return res.status(500).json({ text: "Error en DB" });
+    if (err) {
+        console.error("❌ ERROR DB:", err);
+        return res.status(500).json({ text: "Error en DB" });
+    }
     
     if (results && results.length > 0) {
       return res.json({ text: results[0].respuesta });
     } else {
       try {
         const aiRes = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-          model: 'openai/gpt-3.5-turbo',
+          model: 'google/gemini-2.0-flash-001', // Cambié a Gemini que es más probable que tengas activo
           messages: [{ role: 'system', content: AGRO_PROMPT }, { role: 'user', content: mensaje }]
-        }, { headers: { 'Authorization': `Bearer ${API_KEY}` } });
+        }, { 
+            headers: { 
+                'Authorization': `Bearer ${API_KEY}`,
+                'HTTP-Referer': 'http://localhost:3000'
+            } 
+        });
         res.json({ text: aiRes.data.choices[0].message.content });
       } catch (e) {
-        res.json({ text: "Error al conectar con la BD." });
+        // ESTO TE DIRÁ SI ES FALTA DE CRÉDITO
+        console.error("❌ ERROR EN CHAT (OpenRouter):", e.response?.data || e.message);
+        res.status(500).json({ text: "error en BD." });
       }
     }
   });
 });
 
-// --- 2. GUARDAR MENSAJES (Sincronizado con tus columnas) ---
+// --- 2. GUARDAR MENSAJES ---
 app.post("/messages", (req, res) => {
     const { conversation_id, role, text } = req.body;
     if (!conversation_id) return res.status(400).json({ error: "Falta ID de conversación" });
 
     const sql = "INSERT INTO messages (conversation_id, role, text) VALUES (?, ?, ?)";
     db.query(sql, [conversation_id, role, text], (err, result) => {
-        if (err) return res.status(500).json({ error: err.sqlMessage });
+        if (err) {
+            console.error("❌ ERROR AL GUARDAR MENSAJE:", err.sqlMessage);
+            return res.status(500).json({ error: err.sqlMessage });
+        }
         res.json({ id: result.insertId });
     });
 });
 
-// --- 3. CONVERSACIONES ---
+// (El resto de tus rutas GET y DELETE se mantienen igual...)
 app.post("/conversations", (req, res) => {
     const { user_id, titulo } = req.body;
     const sql = "INSERT INTO conversations (user_id, titulo) VALUES (?, ?)";
-    db.query(sql, [user_id, titulo || 'Consulta con imagen'], (err, result) => {
+    db.query(sql, [user_id, titulo || 'Nueva consulta'], (err, result) => {
         if (err) return res.status(500).json(err);
         res.json({ id: result.insertId });
     });
@@ -123,7 +134,6 @@ app.delete("/conversations/:id", (req, res) => {
     });
 });
 
-// --- 4. LOGIN / REGISTRO ---
 app.post("/register", (req, res) => {
     const { nombre, correo } = req.body; 
     db.query("INSERT INTO users (nombre, correo) VALUES (?,?)", [nombre, correo], (err, result) => {
@@ -140,4 +150,6 @@ app.post("/login", (req, res) => {
     });
 });
 
-app.listen(3000, () => console.log("🚀 listo para funcionar"));
+app.listen(3000, () => {
+    console.log("🚀 Servidor Quetzal encendido en http://localhost:3000");
+});
